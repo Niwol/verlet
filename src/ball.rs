@@ -2,7 +2,12 @@ use bevy::ecs::component::Component;
 use bevy::math::Vec2;
 use std::cell::RefCell;
 use std::rc::Rc;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
+
+#[derive(Component)]
+pub struct RcBall {
+    rcball: Arc<Mutex<Ball>>,
+}
 
 #[derive(Component, Default)]
 pub struct Ball {
@@ -65,7 +70,7 @@ impl Ball {
 }
 
 pub struct BallVector<'a> {
-    vec: Vec<Mutex<&'a Ball>>,
+    vec: Vec<&'a RcBall>,
 }
 
 impl<'a> BallVector<'a> {
@@ -73,7 +78,7 @@ impl<'a> BallVector<'a> {
         BallVector { vec: Vec::new() }
     }
 
-    pub fn push(&mut self, ball: &'a Ball) {
-        self.vec.push(Mutex::new(ball));
+    pub fn push(&mut self, ball: &'a RcBall) {
+        self.vec.push(ball);
     }
 }

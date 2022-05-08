@@ -1,6 +1,8 @@
 use bevy::prelude::*;
 
-use verlet::VerletPlugin;
+// use verlet::VerletPlugin;
+
+// use std::cell::RefCell;
 
 fn main() {
     App::new()
@@ -12,6 +14,8 @@ fn main() {
         .add_plugin(VerletPlugin)
         .add_startup_system(setup)
         .run();
+
+    // f();
 }
 
 fn setup(mut commands: Commands) {
@@ -35,8 +39,8 @@ fn setup(mut commands: Commands) {
 //     for (i, rp1) in points.iter().enumerate() {
 //         for (j, rp2) in points.iter().enumerate() {
 //             if i != j {
-//                 let mut p1 = rp1.try_borrow_mut().unwrap();
-//                 let mut p2 = rp2.try_borrow_mut().unwrap();
+//                 let mut p1 = rp1.borrow_mut();
+//                 let mut p2 = rp2.borrow_mut();
 
 //                 p1.x += 2.0;
 //                 p2.y += 3.0;

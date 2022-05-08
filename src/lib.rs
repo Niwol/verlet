@@ -2,9 +2,12 @@ mod ball;
 
 use ball::Ball;
 use ball::BallVector;
+use ball::RcBall;
 use bevy::{prelude::*, render::mesh::PrimitiveTopology};
 use rand::Rng;
 use std::rc::Rc;
+use std::sync::Arc;
+use std::sync::Mutex;
 
 pub struct VerletPlugin;
 
@@ -20,13 +23,13 @@ impl Plugin for VerletPlugin {
     }
 }
 
-fn spawn_ball<'a>(
+fn spawn_ball(
     mut commands: Commands,
     input: Res<Input<KeyCode>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
     mut total_balls: ResMut<TotalBalls>,
-    mut ball_vector: ResMut<BallVector>,
+    mut ball_vector: ResMut<&'static BallVector>,
 ) {
     if !input.pressed(KeyCode::Space) && !input.just_pressed(KeyCode::X) {
         return;
@@ -81,9 +84,19 @@ fn spawn_ball<'a>(
         ..default()
     };
 
-    commands
-        .spawn_bundle(mesh_bundle)
-        .insert(Ball::new(Vec2::new(0.0, 0.0), r, vel));
+    let ball = Ball::new(Vec2::new(0.0, 0.0), r, vel);
+    let rcball = Arc::new(Mutex::new(ball));
+    let comp = RcBall {
+        rcball: Arc::clone(&rcball),
+    };
+
+    let my_ball = RcBall {
+        rcball: Arc::clone(&rcball),
+    };
+
+    ball_vector.push(&my_ball);
+
+    commands.spawn_bundle(mesh_bundle).insert(comp);
 
     total_balls.0 += 1;
     println!("Total balls: {}", total_balls.0);
@@ -128,6 +141,7 @@ fn apply_gravity(query: &mut Query<(&mut Transform, &mut Ball)>) {
         b.accelerate(g);
     }
 }
+
 fn apply_constraints(window: &Window, query: &mut Query<(&mut Transform, &mut Ball)>) {
     for (_, mut b) in query.iter_mut() {
         b.apply_constraints(window.width(), window.height());
