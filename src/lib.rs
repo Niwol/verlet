@@ -1,8 +1,10 @@
 mod ball;
 
 use ball::Ball;
+use ball::BallVector;
 use bevy::{prelude::*, render::mesh::PrimitiveTopology};
 use rand::Rng;
+use std::rc::Rc;
 
 pub struct VerletPlugin;
 
@@ -11,18 +13,20 @@ struct TotalBalls(u64);
 impl Plugin for VerletPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(TotalBalls(0))
+            .insert_resource(BallVector::new())
             .add_system(spawn_ball)
             .add_system(remove_ball)
             .add_system(update_balls);
     }
 }
 
-fn spawn_ball(
+fn spawn_ball<'a>(
     mut commands: Commands,
     input: Res<Input<KeyCode>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
     mut total_balls: ResMut<TotalBalls>,
+    mut ball_vector: ResMut<BallVector>,
 ) {
     if !input.pressed(KeyCode::Space) && !input.just_pressed(KeyCode::X) {
         return;
