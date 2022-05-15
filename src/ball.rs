@@ -1,13 +1,5 @@
 use bevy::ecs::component::Component;
 use bevy::math::Vec2;
-use std::cell::RefCell;
-use std::rc::Rc;
-use std::sync::{Arc, Mutex};
-
-#[derive(Component)]
-pub struct RcBall {
-    rcball: Arc<Mutex<Ball>>,
-}
 
 #[derive(Component, Default)]
 pub struct Ball {
@@ -38,16 +30,20 @@ impl Ball {
         self.acceleration = Vec2::new(0.0, 0.0);
     }
 
-    pub fn apply_constraints(&mut self, _w: f32, _h: f32) {
-        let center = Vec2::new(0.0, 0.0);
-        let radius = 300.0;
+    pub fn apply_constraints(&mut self, w: f32, h: f32) {
+        // Bottom
+        if self.current_pos.y - self.radius < -h / 2.0 {
+            self.current_pos.y = -h / 2.0 + self.radius;
+        }
 
-        let to_obj = self.current_pos - center;
-        let dist = to_obj.length();
+        // Left
+        if self.current_pos.x - self.radius < -w / 2.0 {
+            self.current_pos.x = -w / 2.0 + self.radius;
+        }
 
-        if dist > radius - self.radius {
-            let n = to_obj.normalize();
-            self.current_pos = center + n * (radius - self.radius);
+        // Right
+        if self.current_pos.x + self.radius > w / 2.0 {
+            self.current_pos.x = w / 2.0 - self.radius;
         }
     }
 
@@ -66,19 +62,5 @@ impl Ball {
 
     pub fn get_position(&self) -> Vec2 {
         self.current_pos
-    }
-}
-
-pub struct BallVector<'a> {
-    vec: Vec<&'a RcBall>,
-}
-
-impl<'a> BallVector<'a> {
-    pub fn new() -> Self {
-        BallVector { vec: Vec::new() }
-    }
-
-    pub fn push(&mut self, ball: &'a RcBall) {
-        self.vec.push(ball);
     }
 }

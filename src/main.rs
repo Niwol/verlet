@@ -1,21 +1,37 @@
 use bevy::prelude::*;
 
-// use verlet::VerletPlugin;
+use verlet::VerletPlugin;
+
+mod quadtree;
+use quadtree::QuadTree;
 
 // use std::cell::RefCell;
 
 fn main() {
-    App::new()
-        .insert_resource(WindowDescriptor {
-            title: "Verlet".to_string(),
-            ..default()
-        })
-        .add_plugins(DefaultPlugins)
-        .add_plugin(VerletPlugin)
-        .add_startup_system(setup)
-        .run();
+    // App::new()
+    //     .insert_resource(WindowDescriptor {
+    //         title: "Verlet".to_string(),
+    //         ..default()
+    //     })
+    //     .add_plugins(DefaultPlugins)
+    //     .add_plugin(VerletPlugin)
+    //     .add_startup_system(setup)
+    //     .run();
 
-    // f();
+    let mut qt = QuadTree::new(3, Vec2::new(0.0, 0.0), Vec2::new(200.0, 200.0));
+    qt.add(1, Vec2::new(10.0, 10.0), Vec2::new(10.0, 10.0));
+    qt.add(1, Vec2::new(10.0, 10.0), Vec2::new(10.0, 10.0));
+    qt.add(1, Vec2::new(10.0, 10.0), Vec2::new(10.0, 10.0));
+    qt.add(1, Vec2::new(10.0, 10.0), Vec2::new(10.0, 10.0));
+    qt.add(2, Vec2::new(60.0, 10.0), Vec2::new(10.0, 10.0));
+    qt.add(3, Vec2::new(10.0, 60.0), Vec2::new(10.0, 10.0));
+    qt.add(4, Vec2::new(60.0, 60.0), Vec2::new(10.0, 10.0));
+    qt.add(5, Vec2::new(45.0, 60.0), Vec2::new(10.0, 10.0));
+    qt.add(6, Vec2::new(120.0, 60.0), Vec2::new(10.0, 10.0));
+    qt.add(7, Vec2::new(120.0, 95.0), Vec2::new(10.0, 10.0));
+
+    println!("QuadTree:");
+    println!("{}", qt);
 }
 
 fn setup(mut commands: Commands) {

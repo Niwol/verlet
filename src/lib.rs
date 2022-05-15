@@ -1,13 +1,10 @@
 mod ball;
+mod quadtree;
 
 use ball::Ball;
-use ball::BallVector;
-use ball::RcBall;
 use bevy::{prelude::*, render::mesh::PrimitiveTopology};
+use quadtree::QuadTree;
 use rand::Rng;
-use std::rc::Rc;
-use std::sync::Arc;
-use std::sync::Mutex;
 
 pub struct VerletPlugin;
 
@@ -16,10 +13,12 @@ struct TotalBalls(u64);
 impl Plugin for VerletPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(TotalBalls(0))
-            .insert_resource(BallVector::new())
             .add_system(spawn_ball)
-            .add_system(remove_ball)
+            // .add_system(remove_ball)
             .add_system(update_balls);
+
+        let mut qt = QuadTree::new(4, Vec2::new(200.0, 200.0), Vec2::new(200.0, 200.0));
+        qt.add(5, Vec2::new(2.0, 3.0), Vec2::new(2.0, 3.0));
     }
 }
 
@@ -29,13 +28,12 @@ fn spawn_ball(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
     mut total_balls: ResMut<TotalBalls>,
-    mut ball_vector: ResMut<&'static BallVector>,
 ) {
     if !input.pressed(KeyCode::Space) && !input.just_pressed(KeyCode::X) {
         return;
     }
 
-    let r = rand::thread_rng().gen_range(5.0..15.0);
+    let r = rand::thread_rng().gen_range(2.0..10.0);
     let vel = Vec2::new(
         rand::thread_rng().gen_range(-2.0..=2.0),
         rand::thread_rng().gen_range(0.0..=1.0),
@@ -85,24 +83,14 @@ fn spawn_ball(
     };
 
     let ball = Ball::new(Vec2::new(0.0, 0.0), r, vel);
-    let rcball = Arc::new(Mutex::new(ball));
-    let comp = RcBall {
-        rcball: Arc::clone(&rcball),
-    };
 
-    let my_ball = RcBall {
-        rcball: Arc::clone(&rcball),
-    };
-
-    ball_vector.push(&my_ball);
-
-    commands.spawn_bundle(mesh_bundle).insert(comp);
+    commands.spawn_bundle(mesh_bundle).insert(ball);
 
     total_balls.0 += 1;
     println!("Total balls: {}", total_balls.0);
 }
 
-fn remove_ball(mut commands: Commands, query: Query<(Entity, &Ball)>) {
+fn _remove_ball(mut commands: Commands, query: Query<(Entity, &Ball)>) {
     for (e, b) in query.iter() {
         if b.get_position().y < -400.0 {
             commands.entity(e).despawn();
@@ -118,7 +106,7 @@ fn update_balls(
     let window = windows.get_primary().unwrap();
     let dt = time.delta_seconds();
 
-    let sub_steps = 8;
+    let sub_steps = 10;
     let sub_dt = dt / sub_steps as f32;
 
     for _ in 0..sub_steps {
