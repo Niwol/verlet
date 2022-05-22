@@ -1,12 +1,18 @@
 use bevy::ecs::component::Component;
 use bevy::math::Vec2;
 
+use crate::quadtree::QuadRect;
+
 #[derive(Component, Default)]
 pub struct Ball {
     current_pos: Vec2,
     prev_pos: Vec2,
     acceleration: Vec2,
-    radius: f32,
+
+    pub radius: f32,
+
+    pub rect: QuadRect,
+    id: usize,
 }
 
 impl Ball {
@@ -15,6 +21,11 @@ impl Ball {
             current_pos: pos,
             prev_pos: -vel,
             radius: r,
+
+            rect: QuadRect {
+                pos: Vec2::new(pos.x - r / 2.0, pos.y - r / 2.0),
+                dim: Vec2::new(r, r),
+            },
             ..Default::default()
         }
     }
@@ -30,20 +41,25 @@ impl Ball {
         self.acceleration = Vec2::new(0.0, 0.0);
     }
 
-    pub fn apply_constraints(&mut self, w: f32, h: f32) {
+    pub fn apply_constraints(&mut self, pos: Vec2, dim: Vec2) {
+        // Top
+        if self.current_pos.y - self.radius < pos.y {
+            self.current_pos.y = pos.y + self.radius;
+        }
+
         // Bottom
-        if self.current_pos.y - self.radius < -h / 2.0 {
-            self.current_pos.y = -h / 2.0 + self.radius;
+        if self.current_pos.y + self.radius > pos.y + dim.y {
+            self.current_pos.y = pos.y + dim.y - self.radius;
         }
 
         // Left
-        if self.current_pos.x - self.radius < -w / 2.0 {
-            self.current_pos.x = -w / 2.0 + self.radius;
+        if self.current_pos.x - self.radius < pos.x {
+            self.current_pos.x = pos.x + self.radius;
         }
 
         // Right
-        if self.current_pos.x + self.radius > w / 2.0 {
-            self.current_pos.x = w / 2.0 - self.radius;
+        if self.current_pos.x + self.radius > pos.x + dim.x {
+            self.current_pos.x = pos.x + dim.x - self.radius;
         }
     }
 
@@ -60,7 +76,23 @@ impl Ball {
         }
     }
 
+    pub fn set_id(&mut self, id: usize) {
+        self.id = id;
+    }
+
     pub fn get_position(&self) -> Vec2 {
         self.current_pos
+    }
+
+    pub fn get_prev_position(&self) -> Vec2 {
+        self.prev_pos
+    }
+
+    pub fn get_radius(&self) -> f32 {
+        self.radius
+    }
+
+    pub fn get_id(&self) -> usize {
+        self.id
     }
 }

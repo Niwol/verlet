@@ -1,3 +1,4 @@
+use std::borrow::Borrow;
 use std::collections::BTreeMap;
 use std::fmt::{Debug, Display};
 
@@ -22,29 +23,23 @@ struct QuadNode {
     level: usize,
 }
 
-#[derive(Copy, Clone, Debug)]
-struct QuadRect {
-    pos: Vec2,
-    dim: Vec2,
-}
-
-#[derive(Debug, Clone)]
-struct QuadObject<T> {
-    object: T,
-    rect: QuadRect,
+#[derive(Copy, Clone, Debug, Default)]
+pub struct QuadRect {
+    pub pos: Vec2,
+    pub dim: Vec2,
 }
 
 impl<T> QuadTree<T>
 where
     T: Clone,
 {
-    pub fn new(capacity: usize, pos: Vec2, dim: Vec2) -> Self {
+    pub fn new(capacity: usize, rect: QuadRect) -> Self {
         QuadTree {
             capacity,
             root: QuadNode {
                 object_ids: Vec::new(),
                 size: 0,
-                rect: QuadRect { pos, dim },
+                rect,
                 childs: None,
                 level: 0,
             },
@@ -54,9 +49,7 @@ where
         }
     }
 
-    pub fn add(&mut self, object: T, pos: Vec2, dim: Vec2) -> usize {
-        let rect = QuadRect { pos, dim };
-
+    pub fn add(&mut self, object: T, rect: QuadRect) -> usize {
         let id = self.next_id;
         self.root.add(id, rect, self.capacity);
 
@@ -77,13 +70,112 @@ where
         res
     }
 
-    pub fn remove_with_rect_contained(&mut self, id: usize, pos: Vec2, dim: Vec2) -> Option<T> {
-        let rect = QuadRect { pos, dim };
-
+    pub fn remove_with_rect_contained(&mut self, id: usize, rect: QuadRect) -> Option<T> {
         let ret = self.objects.remove(&id);
         if let Some(_) = ret {
             self.root
                 .remove_with_rect_contained(id, rect, self.capacity);
+        }
+
+        ret
+    }
+
+    pub fn remove_with_rect_overlaped(&mut self, id: usize, rect: QuadRect) -> Option<T> {
+        let ret = self.objects.remove(&id);
+        if let Some(_) = ret {
+            self.root
+                .remove_with_rect_overlaped(id, rect, self.capacity);
+        }
+
+        ret
+    }
+
+    pub fn search_overlaped(&self, rect: QuadRect) -> Vec<&T> {
+        let vec = self.root.search_overlaped(rect);
+        let mut ret = Vec::new();
+
+        for id in vec {
+            match self.objects.get(&id) {
+                Some(obj) => ret.push(obj),
+                None => panic!("Found invalid id"),
+            }
+        }
+
+        ret
+    }
+
+    pub fn relocate(&mut self, id: usize, new_rect: QuadRect) {
+        if self.root.remove(id, self.capacity) {
+            self.root.add(id, new_rect, self.capacity);
+        }
+    }
+
+    pub fn relocate_contained(&mut self, id: usize, current_rect: QuadRect, new_rect: QuadRect) {
+        if self
+            .root
+            .remove_with_rect_contained(id, current_rect, self.capacity)
+        {
+            self.root.add(id, new_rect, self.capacity);
+        }
+    }
+
+    pub fn relocate_overlaped(&mut self, id: usize, current_rect: QuadRect, new_rect: QuadRect) {
+        if self
+            .root
+            .remove_with_rect_overlaped(id, current_rect, self.capacity)
+        {
+            self.root.add(id, new_rect, self.capacity);
+        }
+    }
+
+    pub fn get_vertices(&self) -> Vec<[f32; 3]> {
+        let pos = self.root.rect.pos;
+        let dim = self.root.rect.dim;
+
+        let mut ret = vec![
+            // Top
+            [pos.x, pos.y, 0.0],
+            [pos.x + dim.x, pos.y, 0.0],
+            // Down
+            [pos.x, pos.y + dim.y, 0.0],
+            [pos.x + dim.x, pos.y + dim.y, 0.0],
+            // Left
+            [pos.x, pos.y, 0.0],
+            [pos.x, pos.y + dim.y, 0.0],
+            // Right
+            [pos.x + dim.x, pos.y, 0.0],
+            [pos.x + dim.x, pos.y + dim.y, 0.0],
+        ];
+
+        if let Some(childs) = self.root.childs.borrow() {
+            ret.append(&mut vec![
+                // Vertical
+                [
+                    self.root.rect.pos.x + self.root.rect.dim.x / 2.0,
+                    self.root.rect.pos.y,
+                    0.0,
+                ],
+                [
+                    self.root.rect.pos.x + self.root.rect.dim.x / 2.0,
+                    self.root.rect.pos.y + self.root.rect.dim.y,
+                    0.0,
+                ],
+                // Horizontal
+                [
+                    self.root.rect.pos.x,
+                    self.root.rect.pos.y + self.root.rect.dim.y / 2.0,
+                    0.0,
+                ],
+                [
+                    self.root.rect.pos.x + self.root.rect.dim.x,
+                    self.root.rect.pos.y + self.root.rect.dim.y / 2.0,
+                    0.0,
+                ],
+            ]);
+
+            for child in childs {
+                ret.append(&mut child.get_vertices());
+            }
         }
 
         ret
@@ -165,8 +257,8 @@ impl QuadNode {
             let (_, rect_vec) = self.object_ids[idx];
 
             if rect.contains(&rect_vec) {
-                self.size -= 1;
                 self.object_ids.swap_remove(idx);
+                self.size -= 1;
                 self.repair(capacity);
 
                 return true;
@@ -174,6 +266,52 @@ impl QuadNode {
         }
 
         false
+    }
+
+    fn remove_with_rect_overlaped(&mut self, id: usize, rect: QuadRect, capacity: usize) -> bool {
+        let childs = self.childs.as_mut();
+
+        if let Some(childs) = childs {
+            for child in childs {
+                if child.remove_with_rect_contained(id, rect, capacity) {
+                    self.size -= 1;
+                    self.repair(capacity);
+                    return true;
+                }
+            }
+        }
+
+        if let Some(idx) = self.object_ids.iter().position(|&(id_vec, _)| id == id_vec) {
+            let (_, rect_vec) = self.object_ids[idx];
+
+            if rect.overlaps(&rect_vec) {
+                self.object_ids.swap_remove(idx);
+                self.size -= 1;
+                self.repair(capacity);
+
+                return true;
+            }
+        }
+
+        false
+    }
+
+    fn search_overlaped(&self, rect: QuadRect) -> Vec<usize> {
+        let mut ret = Vec::new();
+
+        for &(id, obj_rect) in self.object_ids.iter() {
+            if rect.overlaps(&obj_rect) {
+                ret.push(id);
+            }
+        }
+
+        if let Some(childs) = self.childs.borrow() {
+            for child in childs {
+                ret.append(&mut self.search_overlaped(rect));
+            }
+        }
+
+        ret
     }
 
     fn subdivide(&mut self, capacity: usize) {
@@ -245,10 +383,8 @@ impl QuadNode {
 
     fn repair(&mut self, capacity: usize) {
         if self.size <= capacity {
-            let mut vec = self.pull_all_up();
-
+            self.object_ids = self.pull_all_up();
             self.childs = None;
-            self.object_ids.append(&mut vec);
         }
     }
 
@@ -260,8 +396,46 @@ impl QuadNode {
                 res.append(&mut child.pull_all_up());
             }
         }
+        res.append(&mut self.object_ids);
 
         res
+    }
+
+    fn get_vertices(&self) -> Vec<[f32; 3]> {
+        let mut ret = Vec::new();
+
+        if let Some(childs) = self.childs.borrow() {
+            ret.append(&mut vec![
+                // Vertical
+                [
+                    self.rect.pos.x + self.rect.dim.x / 2.0,
+                    self.rect.pos.y,
+                    0.0,
+                ],
+                [
+                    self.rect.pos.x + self.rect.dim.x / 2.0,
+                    self.rect.pos.y + self.rect.dim.y,
+                    0.0,
+                ],
+                // Horizontal
+                [
+                    self.rect.pos.x,
+                    self.rect.pos.y + self.rect.dim.y / 2.0,
+                    0.0,
+                ],
+                [
+                    self.rect.pos.x + self.rect.dim.x,
+                    self.rect.pos.y + self.rect.dim.y / 2.0,
+                    0.0,
+                ],
+            ]);
+
+            for child in childs {
+                ret.append(&mut child.get_vertices());
+            }
+        }
+
+        ret
     }
 }
 
@@ -297,7 +471,7 @@ impl Display for QuadNode {
 
         s.push_str("{\n");
 
-        s.push_str(format!("{}\tobjects: ", tabs).as_str());
+        s.push_str(format!("{}\tids: ", tabs).as_str());
         for (id, _) in self.object_ids.iter() {
             s.push_str(format!("{}; ", id).as_str());
         }
@@ -327,9 +501,9 @@ impl QuadRect {
     }
 
     fn overlaps(&self, other: &Self) -> bool {
-        self.pos.x < other.pos.x + other.dim.x
-            && self.pos.x + self.dim.x < other.pos.x
-            && self.pos.y < other.pos.y + other.dim.y
-            && self.pos.y + self.dim.y < other.pos.y
+        self.pos.x <= other.pos.x + other.dim.x
+            && self.pos.x + self.dim.x >= other.pos.x
+            && self.pos.y <= other.pos.y + other.dim.y
+            && self.pos.y + self.dim.y >= other.pos.y
     }
 }
