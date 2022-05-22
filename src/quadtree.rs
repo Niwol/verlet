@@ -1,4 +1,3 @@
-use std::borrow::Borrow;
 use std::collections::BTreeMap;
 use std::fmt::{Debug, Display};
 
@@ -7,17 +6,19 @@ use bevy::math::Vec2;
 #[derive(Debug)]
 pub struct QuadTree<T> {
     capacity: usize,
-    root: QuadNode<T>,
+    root: QuadNode,
     next_id: usize,
+
+    objects: BTreeMap<usize, T>,
 }
 
 #[derive(Debug)]
-struct QuadNode<T> {
-    objects: BTreeMap<usize, QuadObject<T>>,
+struct QuadNode {
+    object_ids: Vec<(usize, QuadRect)>,
     size: usize,
     rect: QuadRect,
 
-    childs: Option<[Box<QuadNode<T>>; 4]>,
+    childs: Option<[Box<QuadNode>; 4]>,
     level: usize,
 }
 
@@ -41,88 +42,89 @@ where
         QuadTree {
             capacity,
             root: QuadNode {
-                objects: BTreeMap::new(),
+                object_ids: Vec::new(),
                 size: 0,
-                rect: QuadRect { dim, pos },
+                rect: QuadRect { pos, dim },
                 childs: None,
                 level: 0,
             },
             next_id: 0,
+
+            objects: BTreeMap::new(),
         }
     }
 
     pub fn add(&mut self, object: T, pos: Vec2, dim: Vec2) -> usize {
         let rect = QuadRect { pos, dim };
-        let obj = QuadObject { object, rect };
 
         let id = self.next_id;
-        self.root.add(obj, id, self.capacity);
+        self.root.add(id, rect, self.capacity);
+
+        if let Some(_) = self.objects.insert(id, object) {
+            panic!("No unique ID");
+        }
 
         self.next_id += 1;
         id
     }
 
     pub fn remove(&mut self, id: usize) -> Option<T> {
-        self.root.remove(id, self.capacity)
+        let res = self.objects.remove(&id);
+        if let Some(_) = res {
+            self.root.remove(id, self.capacity);
+        }
+
+        res
     }
 
     pub fn remove_with_rect_contained(&mut self, id: usize, pos: Vec2, dim: Vec2) -> Option<T> {
         let rect = QuadRect { pos, dim };
-        self.root
-            .remove_with_rect_contained(id, rect, self.capacity)
+
+        let ret = self.objects.remove(&id);
+        if let Some(_) = ret {
+            self.root
+                .remove_with_rect_contained(id, rect, self.capacity);
+        }
+
+        ret
     }
 }
 
-impl<T> QuadNode<T>
-where
-    T: Clone,
-{
-    fn add(&mut self, object: QuadObject<T>, id: usize, capacity: usize) {
+impl QuadNode {
+    fn add(&mut self, id: usize, rect: QuadRect, capacity: usize) {
         match &mut self.childs {
             None => {
-                if self.objects.len() < capacity {
-                    self.objects.insert(id, object);
+                if self.object_ids.len() < capacity {
+                    self.object_ids.push((id, rect));
                 } else {
                     self.subdivide(capacity);
-                    self.add(object, id, capacity);
+                    self.add(id, rect, capacity);
                 }
             }
 
             Some(childs) => {
                 for child in childs {
-                    if child.rect.contains(&object.rect) {
-                        child.add(object, id, capacity);
+                    if child.rect.contains(&rect) {
+                        child.add(id, rect, capacity);
                         return;
                     }
                 }
 
-                self.objects.insert(id, object);
+                self.object_ids.push((id, rect));
             }
         }
 
         self.size += 1;
     }
 
-    fn remove_all(&mut self) -> BTreeMap<usize, QuadObject<T>> {
-        let mut res = BTreeMap::new();
-
-        if let Some(childs) = self.childs.as_mut() {
-            for child in childs {
-                res.append(&mut child.remove_all());
-            }
-        }
-
-        res.append(&mut self.objects);
-
-        res
-    }
-
-    fn remove(&mut self, id: usize, capacity: usize) -> Option<T> {
-        match self.objects.remove(&id) {
-            Some(obj) => {
+    fn remove(&mut self, id: usize, capacity: usize) -> bool {
+        match self.object_ids.iter().position(|&(idv, _)| id == idv) {
+            Some(idx) => {
                 self.size -= 1;
+                self.object_ids.swap_remove(idx);
                 self.repair(capacity);
-                Some(obj.object)
+
+                true
             }
 
             None => {
@@ -131,62 +133,47 @@ where
                 match childs {
                     Some(childs) => {
                         for child in childs {
-                            if let Some(obj) = child.remove(id, capacity) {
+                            if child.remove(id, capacity) {
                                 self.size -= 1;
                                 self.repair(capacity);
-                                return Some(obj);
+                                return true;
                             }
                         }
-                        None
+                        false
                     }
 
-                    None => None,
+                    None => false,
                 }
             }
         }
     }
 
-    fn remove_with_rect_contained(
-        &mut self,
-        id: usize,
-        rect: QuadRect,
-        capacity: usize,
-    ) -> Option<T> {
-        match self.objects.get(&id) {
-            Some(obj) => {
-                if rect.contains(&obj.rect) {
+    fn remove_with_rect_contained(&mut self, id: usize, rect: QuadRect, capacity: usize) -> bool {
+        let childs = self.childs.as_mut();
+
+        if let Some(childs) = childs {
+            for child in childs {
+                if child.remove_with_rect_contained(id, rect, capacity) {
                     self.size -= 1;
                     self.repair(capacity);
-
-                    Some(self.objects.remove(&id).unwrap().object)
-                } else {
-                    None
-                }
-            }
-
-            None => {
-                let childs = self.childs.as_mut();
-
-                match childs {
-                    Some(childs) => {
-                        for child in childs {
-                            if child.rect.contains(&rect) {
-                                let res = child.remove_with_rect_contained(id, rect, capacity);
-
-                                self.size -= 1;
-                                self.repair(capacity);
-
-                                return res;
-                            }
-                        }
-
-                        None
-                    }
-
-                    None => None,
+                    return true;
                 }
             }
         }
+
+        if let Some(idx) = self.object_ids.iter().position(|&(id_vec, _)| id == id_vec) {
+            let (_, rect_vec) = self.object_ids[idx];
+
+            if rect.contains(&rect_vec) {
+                self.size -= 1;
+                self.object_ids.swap_remove(idx);
+                self.repair(capacity);
+
+                return true;
+            }
+        }
+
+        false
     }
 
     fn subdivide(&mut self, capacity: usize) {
@@ -194,7 +181,7 @@ where
             None => {
                 let childs = [
                     Box::new(QuadNode {
-                        objects: BTreeMap::new(),
+                        object_ids: Vec::new(),
                         size: 0,
                         rect: QuadRect {
                             pos: self.rect.pos,
@@ -204,7 +191,7 @@ where
                         level: self.level + 1,
                     }),
                     Box::new(QuadNode {
-                        objects: BTreeMap::new(),
+                        object_ids: Vec::new(),
                         size: 0,
                         rect: QuadRect {
                             pos: Vec2::new(
@@ -217,7 +204,7 @@ where
                         level: self.level + 1,
                     }),
                     Box::new(QuadNode {
-                        objects: BTreeMap::new(),
+                        object_ids: Vec::new(),
                         size: 0,
                         rect: QuadRect {
                             pos: Vec2::new(
@@ -230,7 +217,7 @@ where
                         level: self.level + 1,
                     }),
                     Box::new(QuadNode {
-                        objects: BTreeMap::new(),
+                        object_ids: Vec::new(),
                         size: 0,
                         rect: QuadRect {
                             pos: self.rect.pos + self.rect.dim / 2.0,
@@ -243,12 +230,12 @@ where
 
                 self.childs = Some(childs);
 
-                let map = self.objects.clone();
+                let vec = self.object_ids.clone();
 
-                self.objects.clear();
+                self.object_ids.clear();
 
-                for (id, obj) in map.into_iter() {
-                    self.add(obj, id, capacity);
+                for (id, rect) in vec.into_iter() {
+                    self.add(id, rect, capacity);
                 }
             }
 
@@ -258,15 +245,23 @@ where
 
     fn repair(&mut self, capacity: usize) {
         if self.size <= capacity {
-            if let Some(_) = self.childs {
-                let vec = self.remove_all();
+            let mut vec = self.pull_all_up();
 
-                self.childs = None;
-                for (id, obj) in vec {
-                    self.add(obj, id, capacity);
-                }
+            self.childs = None;
+            self.object_ids.append(&mut vec);
+        }
+    }
+
+    fn pull_all_up(&mut self) -> Vec<(usize, QuadRect)> {
+        let mut res = Vec::new();
+
+        if let Some(childs) = self.childs.as_mut() {
+            for child in childs {
+                res.append(&mut child.pull_all_up());
             }
         }
+
+        res
     }
 }
 
@@ -280,6 +275,9 @@ where
         s.push_str("QuadTree {\n");
 
         s.push_str(format!("\tcapacity: {}\n", self.capacity).as_str());
+
+        s.push_str(format!("\tobjects: {:?}\n", self.objects).as_str());
+
         s.push_str(format!("\troot: {}", self.root).as_str());
 
         s.push_str("}\n");
@@ -288,10 +286,7 @@ where
     }
 }
 
-impl<T> Display for QuadNode<T>
-where
-    T: Debug,
-{
+impl Display for QuadNode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut s = std::string::String::new();
 
@@ -303,8 +298,8 @@ where
         s.push_str("{\n");
 
         s.push_str(format!("{}\tobjects: ", tabs).as_str());
-        for (_, obj) in self.objects.iter() {
-            s.push_str(format!("{:?}; ", obj.object).as_str());
+        for (id, _) in self.object_ids.iter() {
+            s.push_str(format!("{}; ", id).as_str());
         }
         s.push_str("\n");
 
@@ -329,5 +324,12 @@ impl QuadRect {
             && self.pos.x + self.dim.x >= other.pos.x + other.dim.x
             && self.pos.y <= other.pos.y
             && self.pos.y + self.dim.y >= other.pos.y + other.dim.y
+    }
+
+    fn overlaps(&self, other: &Self) -> bool {
+        self.pos.x < other.pos.x + other.dim.x
+            && self.pos.x + self.dim.x < other.pos.x
+            && self.pos.y < other.pos.y + other.dim.y
+            && self.pos.y + self.dim.y < other.pos.y
     }
 }
