@@ -18,17 +18,22 @@ fn main() {
     //     .add_startup_system(setup)
     //     .run();
 
+    let mut vec = Vec::new();
+
     let mut qt = QuadTree::new(3, Vec2::new(0.0, 0.0), Vec2::new(200.0, 200.0));
-    qt.add(1, Vec2::new(10.0, 10.0), Vec2::new(10.0, 10.0));
-    qt.add(1, Vec2::new(10.0, 10.0), Vec2::new(10.0, 10.0));
-    qt.add(1, Vec2::new(10.0, 10.0), Vec2::new(10.0, 10.0));
-    qt.add(1, Vec2::new(10.0, 10.0), Vec2::new(10.0, 10.0));
-    qt.add(2, Vec2::new(60.0, 10.0), Vec2::new(10.0, 10.0));
-    qt.add(3, Vec2::new(10.0, 60.0), Vec2::new(10.0, 10.0));
-    qt.add(4, Vec2::new(60.0, 60.0), Vec2::new(10.0, 10.0));
-    qt.add(5, Vec2::new(45.0, 60.0), Vec2::new(10.0, 10.0));
-    qt.add(6, Vec2::new(120.0, 60.0), Vec2::new(10.0, 10.0));
-    qt.add(7, Vec2::new(120.0, 95.0), Vec2::new(10.0, 10.0));
+
+    vec.push(qt.add(1, Vec2::new(10.0, 10.0), Vec2::new(10.0, 10.0)));
+    vec.push(qt.add(2, Vec2::new(60.0, 10.0), Vec2::new(10.0, 10.0)));
+    vec.push(qt.add(3, Vec2::new(10.0, 60.0), Vec2::new(10.0, 10.0)));
+    vec.push(qt.add(4, Vec2::new(60.0, 60.0), Vec2::new(10.0, 10.0)));
+    // vec.push(qt.add(5, Vec2::new(45.0, 60.0), Vec2::new(10.0, 10.0)));
+    // vec.push(qt.add(6, Vec2::new(120.0, 60.0), Vec2::new(10.0, 10.0)));
+    // vec.push(qt.add(7, Vec2::new(120.0, 95.0), Vec2::new(10.0, 10.0)));
+
+    qt.remove(vec.remove(1));
+
+    // qt.remove_with_rect_contained(vec.remove(2), Vec2::new(60.0, 60.0), Vec2::new(10.0, 10.0));
+    // qt.remove_with_rect_contained(vec.remove(2), Vec2::new(59.0, 59.0), Vec2::new(12.0, 12.0));
 
     println!("QuadTree:");
     println!("{}", qt);
