@@ -1,0 +1,19 @@
+[package]
+name = "verlet"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[profile.dev]
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 3
+
+[dependencies]
+bevy = { version = "0.13.0", features = ["dynamic_linking"] }
+rand = "0.8.5"
+
+acceleration_structures = { git = "https://github.com/Niwol/acceleration_structures", branch = "main" }
+
